@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Agent pool that can call MCP tools via HTTP if available."""
+"""Agent pool discovery of MCP servers exposed over HTTP (SSE/JSON-RPC)."""
 import json
-import os
 import urllib.request
 from typing import Dict, Any, List
 
@@ -25,8 +24,8 @@ def call_jsonrpc(url: str, method: str, params: Dict[str, Any] = None, timeout: 
 
 def discover_mcp() -> List[str]:
     urls = []
-    for p in [8765, 8766, 8767, 8768, 8080, 8081, 8082, 5000, 3000]:
-        for path in ["/mcp", "/rpc", "/jsonrpc", "/v1/mcp"]:
+    for p in [8770, 8771, 8765, 8766, 8767, 8768, 8080, 8081, 8082, 5000, 3000]:
+        for path in ["/mcp", "/rpc", "/jsonrpc", "/v1/mcp", "/sse"]:
             urls.append(f"http://127.0.0.1:{p}{path}")
     return urls
 

@@ -1,46 +1,45 @@
 #!/usr/bin/env python3
-"""Call MCP servers via stdio (no HTTP needed)."""
+"""Call MCP servers via stdio (no HTTP bridge needed).
+
+Wraps :class:`agent_pool_tools.MCPClient` so a full exchange (initialize ->
+initialized -> tools/list / tools/call) can be run from the shell.
+"""
 import json
-import subprocess
 import sys
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional
+
+from agent_pool_tools import MCPClient, MCPError
 
 
 def list_tools(cmd: List[str]) -> Dict[str, Any]:
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    # Send initialize + tools/list
-    init = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "agent-pool", "version": "0.1.0"}},
-    }
-    tools_req = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+    with MCPClient(cmd) as client:
+        return {"tools": client.list_tools()}
+
+
+def call_tool(cmd: List[str], name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    with MCPClient(cmd) as client:
+        return {"result": client.call_tool(name, arguments)}
+
+
+def main(argv: List[str]) -> int:
+    if len(argv) < 1:
+        print("usage: mcp_stdio.py <cmd...> [--call TOOL [JSON_ARGS]]")
+        return 2
+    call_index = argv.index("--call") if "--call" in argv else -1
+    if call_index != -1:
+        cmd = argv[:call_index]
+        name = argv[call_index + 1]
+        args = json.loads(argv[call_index + 2]) if len(argv) > call_index + 2 else {}
+    else:
+        cmd, name, args = argv, None, None
     try:
-        out1, _ = proc.communicate(json.dumps(init) + "\n" + json.dumps(tools_req) + "\n", timeout=10)
-    except Exception as e:
-        proc.kill()
-        return {"error": str(e)}
-    # parse last json line with result
-    for line in out1.splitlines():
-        try:
-            obj = json.loads(line)
-            if obj.get("id") == 2 and "result" in obj:
-                return obj
-        except Exception:
-            pass
-    return {"error": "no result"}
+        result = call_tool(cmd, name, args) if name else list_tools(cmd)
+    except MCPError as e:
+        print(json.dumps({"error": str(e)}))
+        return 1
+    print(json.dumps(result))
+    return 0
 
 
 if __name__ == "__main__":
-    cmd = sys.argv[1:]
-    if not cmd:
-        print("usage: mcp_stdio.py <cmd...>")
-        sys.exit(1)
-    print(json.dumps(list_tools(cmd)))
+    sys.exit(main(sys.argv[1:]))
